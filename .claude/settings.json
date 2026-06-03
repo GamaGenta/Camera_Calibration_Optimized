@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/home/marie/miniconda3/bin/python -)",
+      "Bash(/home/marie/miniconda3/bin/python -c \"import scipy; print\\('scipy', scipy.__version__\\); from scipy.optimize import least_squares; from scipy.sparse import lil_matrix; print\\('least_squares + sparse OK'\\)\")",
+      "Bash(/home/marie/miniconda3/bin/python B_mono_calib_all.py)",
+      "Bash(grep -v \"^$\")",
+      "Bash(/home/marie/miniconda3/bin/python C_stereo_all.py)",
+      "Read(//tmp/**)",
+      "Bash([ -s \"$f\" ])",
+      "Bash(/home/marie/miniconda3/bin/python D_validate.py)",
+      "Bash(echo \"exit $?\")",
+      "Bash(/home/marie/miniconda3/bin/python E_bundle_adjust.py)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(/home/marie/miniconda3/bin/python A2_capture_guided.py --selftest)"
+    ]
+  }
+}

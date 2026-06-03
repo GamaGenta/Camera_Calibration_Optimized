@@ -1,0 +1,7 @@
+# Ignoriere bestimmte calib-Ordner
+calib_1_2/
+calib_1_3/
+calib_single_1/
+calib_single_2/
+calib_single_3/
+*.mp4

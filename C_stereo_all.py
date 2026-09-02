@@ -32,6 +32,7 @@ PAIRS = [
     # (ref_cam, other_cam, ordner)
     (1, 2, "calib_1_2"),
     (1, 3, "calib_1_3"),
+    (1, 4, "calib_1_4"),
 ]
 
 

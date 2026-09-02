@@ -159,6 +159,7 @@ def multicam_consistency():
     try:
         s12 = load_stereo(1, 2)
         s13 = load_stereo(1, 3)
+        s14 = load_stereo(1, 4)
     except FileNotFoundError:
         print("Stereo-Dateien fehlen -- zuerst C_stereo_all.py ausfuehren.")
         return
@@ -166,21 +167,40 @@ def multicam_consistency():
     # Posen in Cam1-Frame:  X_camK = R_1K X_cam1 + T_1K
     R12, T12 = s12["R"], s12["T"]
     R13, T13 = s13["R"], s13["T"]
+    R14, T14 = s14["R"], s14["T"]
     # Verkettung Cam2 -> Cam3 :  X_c3 = R13 (R12^T (X_c2 - T12)) + T13
     R23 = R13 @ R12.T
     T23 = T13 - R23 @ T12
     base23 = float(np.linalg.norm(T23))
     ang23 = float(np.degrees(np.arccos(np.clip((np.trace(R23) - 1) / 2, -1, 1))))
 
+    # Verkettung Cam3 -> Cam4 : X_c4 = R14 (R13^T (X_c3 - T13)) + T14
+    R34 = R14 @ R13.T
+    T34 = T14 - R34 @ T13
+    # Kennzahlen berechnen
+    base34 = float(np.linalg.norm(T34))
+    ang34 = float(np.degrees(np.arccos(np.clip((np.trace(R34) - 1) / 2, -1, 1))))
+
+
+
     print(f"Baseline Cam1-Cam2: {s12['baseline']:.3f} m  "
           f"(Winkel {s12['rel_angle_deg']:.1f}°)")
     print(f"Baseline Cam1-Cam3: {s13['baseline']:.3f} m  "
           f"(Winkel {s13['rel_angle_deg']:.1f}°)")
+    print(f"Baseline Cam1-Cam4: {s14['baseline']:.3f} m  "
+          f"(Winkel {s14['rel_angle_deg']:.1f}°)")
     print(f"-> abgeleitet Cam2-Cam3: {base23:.3f} m  (Winkel {ang23:.1f}°)")
     print("\nHINWEIS: Es existiert keine direkte 2-3-Aufnahme. Daher kann der")
     print("A->B->C- gegen A->C-Vergleich NICHT validiert werden. Fuer einen")
     print("echten Konsistenztest werden Aufnahmen benoetigt, in denen das")
     print("Board gleichzeitig von Cam2 UND Cam3 (idealerweise allen dreien)")
+    print("gesehen wird -> globale Bundle Adjustment-Stufe (E_bundle_adjust.py).")
+
+    print(f"-> abgeleitet Cam3-Cam4: {base34:.3f} m  (Winkel {ang34:.1f}°)")
+    print("\nHINWEIS: Es existiert keine direkte 3-4-Aufnahme. Daher kann der")
+    print("A->B->C- gegen A->C-Vergleich NICHT validiert werden. Fuer einen")
+    print("echten Konsistenztest werden Aufnahmen benoetigt, in denen das")
+    print("Board gleichzeitig von Cam3 UND Cam4 (idealerweise allen dreien)")
     print("gesehen wird -> globale Bundle Adjustment-Stufe (E_bundle_adjust.py).")
 
 
@@ -191,7 +211,7 @@ def main():
     print("=" * 64)
     print("TRIANGULATIONSTEST")
     print("=" * 64)
-    for ref, other, folder in [(1, 2, "calib_1_2"), (1, 3, "calib_1_3")]:
+    for ref, other, folder in [(1, 2, "calib_1_2"), (1, 3, "calib_1_3"), (1, 4, "calib_1_4")]:
         sname = f"stereo_cam{ref}_cam{other}.pkl"
         if not os.path.exists(sname):
             print(f"[{ref}-{other}] {sname} fehlt -- C_stereo_all.py ausfuehren.")

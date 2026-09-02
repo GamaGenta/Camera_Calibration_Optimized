@@ -29,6 +29,9 @@ Steuerung identisch zu A_ThreeCameraStreamTakePics.py.
 Aufruf (Live):      python A2_capture_guided.py
 Aufruf (Selbsttest, ohne Kameras, schreibt annotierte Beispielbilder):
                     python A2_capture_guided.py --selftest
+
+
+                    Erweiterung um die 4. Kamerea: im rahmen eines Master Projekts 
 """
 
 import sys
@@ -253,7 +256,7 @@ def selftest():
     print("=== SELBSTTEST (ohne Kameras) ===")
     board = cc.make_board()
     detector = cc.make_detector(board)
-    samples = {1: "calib_1_2", 2: "calib_1_2", 3: "calib_1_3"}
+    samples = {1: "calib_1_2", 2: "calib_1_2", 3: "calib_1_3", 4: "calib_1_4"}
     for cam, folder in samples.items():
         files = sorted(glob.glob(os.path.join(folder, f"cam{cam}_*.png")))
         if not files:
@@ -311,8 +314,8 @@ def live(seed=True):
     board = cc.make_board()
     detector = cc.make_detector(board)
 
-    cams = [xiapi.Camera(i) for i in range(3)]
-    imgs = [xiapi.Image() for _ in range(3)]
+    cams = [xiapi.Camera(i) for i in range(4)]
+    imgs = [xiapi.Image() for _ in range(4)]
     sns, ok = [], []
     for idx, c in enumerate(cams, 1):
         try:
@@ -322,28 +325,28 @@ def live(seed=True):
     if not any(ok):
         print("Keine Kameras."); return
 
-    for d in ["calib_1_2", "calib_1_3", "calib_single_1",
-              "calib_single_2", "calib_single_3"]:
+    for d in ["calib_1_2", "calib_1_3", "calib_1_4", "calib_single_1",
+              "calib_single_2", "calib_single_3", "calib_single_4"]:
         os.makedirs(d, exist_ok=True)
 
     # Coverage-Tracker + Intrinsics je Kamera
     trackers, Ks, Ds = {}, {}, {}
-    src = {1: ["calib_1_2", "calib_1_3"], 2: ["calib_1_2"], 3: ["calib_1_3"]}
-    for i in (1, 2, 3):
+    src = {1: ["calib_1_2", "calib_1_3"], 2: ["calib_1_2"], 3: ["calib_1_3"], 4: ["calib_1_4"]}
+    for i in (1, 2, 3, 4):
         trackers[i] = CoverageTracker()
         Ks[i], Ds[i] = load_intrinsics(i, (3008, 4112, 3))
     if seed:
         print("Initialisiere Coverage aus vorhandenen Bildern ...")
-        for i in (1, 2, 3):
+        for i in (1, 2, 3, 4):
             if ok[i - 1]:
                 seed_from_disk(i, src[i], trackers[i], detector, board, Ks[i], Ds[i])
 
-    print("\n[STEUERUNG] p: alle | 6/7/8: einzeln | 2: Paar1+2 | 3: Paar1+3 | q: Ende")
+    print("\n[STEUERUNG] p: alle | 6/7/8/9: einzeln | 2: Paar1+2 | 3: Paar1+3 | 4: Paar1+4 | q: Ende")
     ph = int(DISPLAY_W * 3008 / 4112)
 
     while True:
-        frames = {1: None, 2: None, 3: None}
-        currents = {1: None, 2: None, 3: None}
+        frames = {1: None, 2: None, 3: None, 4: None}
+        currents = {1: None, 2: None, 3: None, 4: None}
         for i, (c, im, good) in enumerate(zip(cams, imgs, ok), 1):
             if not good:
                 continue
@@ -376,7 +379,7 @@ def live(seed=True):
                 trackers[i].update(currents[i]["norm_pts"], t if t == t else 0.0)
 
         if key == ord('p'):
-            save(1, "calib_single_1"); save(2, "calib_single_2"); save(3, "calib_single_3")
+            save(1, "calib_single_1"); save(2, "calib_single_2"); save(3, "calib_single_3"); save(4, "calib_single_3")
             print(f"[OK] alle gespeichert ({ts})")
         elif key == ord('6'):
             save(1, "calib_single_1"); print("[OK] Cam1")
@@ -384,18 +387,23 @@ def live(seed=True):
             save(2, "calib_single_2"); print("[OK] Cam2")
         elif key == ord('8'):
             save(3, "calib_single_3"); print("[OK] Cam3")
+        elif key == ord('9'):
+            save(4, "calib_single_4"); print("[OK] Cam4")
         elif key == ord('2'):
             if frames[1] is not None and frames[2] is not None:
                 save(1, "calib_1_2"); save(2, "calib_1_2"); print("[OK] Paar 1+2")
         elif key == ord('3'):
             if frames[1] is not None and frames[3] is not None:
                 save(1, "calib_1_3"); save(3, "calib_1_3"); print("[OK] Paar 1+3")
+        elif key == ord('4'):
+            if frames[1] is not None and frames[4] is not None:
+                save(1, "calib_1_4"); save(4, "calib_1_4"); print("[OK] Paar 1+4")
 
     for c, good in zip(cams, ok):
         if good:
             c.stop_acquisition(); c.close_device()
     cv2.destroyAllWindows()
-    print("\nEnd-Coverage:", {i: f"{trackers[i].fraction():0.0%}" for i in (1, 2, 3)})
+    print("\nEnd-Coverage:", {i: f"{trackers[i].fraction():0.0%}" for i in (1, 2, 3, 4)})
 
 
 if __name__ == "__main__":

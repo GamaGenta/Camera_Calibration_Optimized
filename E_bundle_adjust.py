@@ -62,12 +62,12 @@ def build_shots(board, detector):
     Folder-Zuordnung: calib_1_2 -> {1,2}, calib_1_3 -> {1,3}.
     """
     mono = {c: load(f"mono_cam{c}.pkl") if os.path.exists(f"mono_cam{c}.pkl")
-            else load(f"mono_cam{c}_pinhole.pkl") for c in (1, 2, 3)}
-    K = {c: mono[c]["K"] for c in (1, 2, 3)}
-    D = {c: mono[c]["D"] for c in (1, 2, 3)}
+            else load(f"mono_cam{c}_pinhole.pkl") for c in (1, 2, 3, 4)}
+    K = {c: mono[c]["K"] for c in (1, 2, 3, 4)}
+    D = {c: mono[c]["D"] for c in (1, 2, 3, 4)}
 
     shots = []
-    for folder, cams in [("calib_1_2", (1, 2)), ("calib_1_3", (1, 3))]:
+    for folder, cams in [("calib_1_2", (1, 2)), ("calib_1_3", (1, 3)), ("calib_1_4", (1, 4))]:
         ref = 1
         ref_files = sorted(glob.glob(os.path.join(folder, f"cam{ref}_*.png")))
         for rf in ref_files:
@@ -108,9 +108,10 @@ def pack(ext, shots):
 def residuals(params, shots, K, D):
     rvec12 = params[0:3]; tvec12 = params[3:6]
     rvec13 = params[6:9]; tvec13 = params[9:12]
-    ext = {2: (rvec12, tvec12), 3: (rvec13, tvec13)}
+    rvec14 = params[12:15]; tvec14 = params[15:18]
+    ext = {2: (rvec12, tvec12), 3: (rvec13, tvec13), 4: (rvec14, tvec14)}
     res = []
-    base = 12
+    base = 12 #12->18 werte?
     for k, s in enumerate(shots):
         rvec_b = params[base + 6*k: base + 6*k + 3]
         tvec_b = params[base + 6*k + 3: base + 6*k + 6]
@@ -147,6 +148,8 @@ def sparsity(shots):
                 M[r:r+m, 0:6] = 1
             elif c == 3:
                 M[r:r+m, 6:12] = 1
+            elif c == 4:
+                M[r:r+m, 12:18] = 1
             r += m
     return M
 
@@ -164,16 +167,20 @@ def main():
     shots, K, D = build_shots(board, detector)
     n2 = sum(1 for s in shots if 2 in s["obs"])
     n3 = sum(1 for s in shots if 3 in s["obs"])
+    n4 = sum(1 for s in shots if 4 in s["obs"]) #n4
     print(f"  {len(shots)} Shots (mit Cam2: {n2}, mit Cam3: {n3})")
+    print(f"  {len(shots)} Shots (mit Cam3: {n3}, mit Cam4: {n4})")
     if len(shots) < 5:
         print("Zu wenige Shots fuer BA."); return
 
     # Startwerte aus Stereo
     s12 = load("stereo_cam1_cam2.pkl")
     s13 = load("stereo_cam1_cam3.pkl")
+    s14 = load("stereo_cam1_cam4.pkl")
     rvec12 = cv2.Rodrigues(s12["R"])[0].ravel()
     rvec13 = cv2.Rodrigues(s13["R"])[0].ravel()
-    ext0 = list(rvec12) + list(s12["T"].ravel()) + list(rvec13) + list(s13["T"].ravel())
+    rvec14 = cv2.Rodrigues(s14["R"])[0].ravel()
+    ext0 = list(rvec12) + list(s12["T"].ravel()) + list(rvec13) + list(s13["T"].ravel()) + list(rvec14) + list(s14["T"].ravel())
     p0 = pack(ext0, shots)
 
     r0 = residuals(p0, shots, K, D)
@@ -196,20 +203,27 @@ def main():
     # Ergebnis-Extrinsics
     R12 = cv2.Rodrigues(sol.x[0:3])[0]; T12 = sol.x[3:6].reshape(3, 1)
     R13 = cv2.Rodrigues(sol.x[6:9])[0]; T13 = sol.x[9:12].reshape(3, 1)
+    R14 = cv2.Rodrigues(sol.x[12:15])[0]; T14 = sol.x[15:18].reshape(4, 1) #
     R23 = R13 @ R12.T
     T23 = T13 - R23 @ T12
+    R34 = R14 @ R13.T
+    T34 = T14 - R34 @ T13
 
     print("\n=== Global optimierte Posen (Cam1 = Ursprung) ===")
     print(f"Cam1->Cam2: Baseline {np.linalg.norm(T12):.4f} m  "
           f"Winkel {decompose(R12,'12'):.2f}°")
     print(f"Cam1->Cam3: Baseline {np.linalg.norm(T13):.4f} m  "
           f"Winkel {decompose(R13,'13'):.2f}°")
+    print(f"Cam1->Cam3: Baseline {np.linalg.norm(T14):.4f} m  "
+          f"Winkel {decompose(R14,'14'):.2f}°")
     print(f"Cam2->Cam3: Baseline {np.linalg.norm(T23):.4f} m  "
           f"Winkel {decompose(R23,'23'):.2f}°  (verkettet)")
+    print(f"Cam2->Cam3: Baseline {np.linalg.norm(T34):.4f} m  "
+          f"Winkel {decompose(R34,'34'):.2f}°  (verkettet)")
 
     out = dict(
-        K1=K[1], D1=D[1], K2=K[2], D2=D[2], K3=K[3], D3=D[3],
-        R12=R12, T12=T12, R13=R13, T13=T13, R23=R23, T23=T23,
+        K1=K[1], D1=D[1], K2=K[2], D2=D[2], K3=K[3], D3=D[3], K4=K[4], D4=D[4],
+        R12=R12, T12=T12, R13=R13, T13=T13, R14=R14, T14=T14, R23=R23, T23=T23, R34=R34, T34=T34,
         rms_start=float(rms0), rms_end=float(rms1),
         num_shots=len(shots), image_size=tuple(load("mono_cam1.pkl")["image_size"])
         if os.path.exists("mono_cam1.pkl") else None,

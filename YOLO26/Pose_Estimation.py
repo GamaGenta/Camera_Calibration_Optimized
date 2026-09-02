@@ -13,6 +13,7 @@ import threading, pose_server
 
 STEREO_CALIB_FILE_1_2 = "./stereo_cam1_cam2.pkl"
 STEREO_CALIB_FILE_1_3 = "./stereo_cam1_cam3.pkl"
+STEREO_CALIB_FILE_1_4 = "./stereo_cam1_cam4.pkl"
 
 # Kamera-Einstellungen
 EXPOSURE_US = 30000
@@ -193,6 +194,28 @@ def load_stereo_calibration_1_3():
     stereo_data['map3x'], stereo_data['map3y'] = cv2.initUndistortRectifyMap(
         K3, D3, R2, P2, image_size, cv2.CV_32FC1)
     return stereo_data
+    
+#new
+def load_stereo_calibration_1_4():
+    """Lädt die Stereokalibrierung Cam1–Cam4"""
+    print("📂 Lade Stereokalibrierung Cam1–Cam4...")
+    if not os.path.exists(STEREO_CALIB_FILE_1_4):
+        raise FileNotFoundError(f"❌ {STEREO_CALIB_FILE_1_4} nicht gefunden!")
+    with open(STEREO_CALIB_FILE_1_4, "rb") as f:
+        stereo_data = pickle.load(f)
+    print(f"✅ Kalibrierung geladen (RMS: {stereo_data['rms']:.4f})")
+
+    K1, D1 = stereo_data['K1'], stereo_data['D1']
+    K4, D4 = stereo_data['K4'], stereo_data['D4']
+    R1, R2 = stereo_data['R1'], stereo_data['R2']
+    P1, P2 = stereo_data['P1'], stereo_data['P2']
+    image_size = stereo_data['image_size']
+
+    stereo_data['map1x'], stereo_data['map1y'] = cv2.initUndistortRectifyMap(
+        K1, D1, R1, P1, image_size, cv2.CV_32FC1)
+    stereo_data['map4x'], stereo_data['map4y'] = cv2.initUndistortRectifyMap(
+        K4, D4, R2, P2, image_size, cv2.CV_32FC1)
+    return stereo_data
 
 
 # =======================
@@ -241,7 +264,7 @@ def extract_landmark_2d(keypoints_xy, keypoints_conf, idx):
 # Triangulation (3D)
 # =======================
 
-def triangulate_points(pt2d_1, pt2d_2, pt2d_3, stereo_data_1_2, stereo_data_1_3):
+def triangulate_points(pt2d_1, pt2d_2, pt2d_3, pt2d_4, stereo_data_1_2, stereo_data_1_3, stereo_data_1_4):
     """
     Trianguliert einen 3D-Punkt aus 2D-Koordinaten aller drei Kameras (DLT).
 
@@ -259,14 +282,21 @@ def triangulate_points(pt2d_1, pt2d_2, pt2d_3, stereo_data_1_2, stereo_data_1_3)
     K3, D3 = stereo_data_1_3['K3'], stereo_data_1_3['D3']
     R_13   = stereo_data_1_3['R']
     T_13   = stereo_data_1_3['T'].reshape(3, 1)
+    
+    K4, D4 = stereo_data_1_4['K4'], stereo_data_1_4['D4']
+    R_13   = stereo_data_1_4['R']
+    T_13   = stereo_data_1_4['T'].reshape(3, 1)
+
 
     P1 = K1 @ np.hstack([np.eye(3),  np.zeros((3, 1))])
     P2 = K2 @ np.hstack([R_12,       T_12])
     P3 = K3 @ np.hstack([R_13,       T_13])
+    P3 = K4 @ np.hstack([R_14,       T_14])
 
     pt1 = cv2.undistortPoints(pt2d_1.reshape(1, 1, 2), K1, D1, P=K1).reshape(2)
     pt2 = cv2.undistortPoints(pt2d_2.reshape(1, 1, 2), K2, D2, P=K2).reshape(2)
     pt3 = cv2.undistortPoints(pt2d_3.reshape(1, 1, 2), K3, D3, P=K3).reshape(2)
+    pt4 = cv2.undistortPoints(pt2d_4.reshape(1, 1, 2), K4, D4, P=K4).reshape(2)
 
     A = np.array([
         pt1[0] * P1[2, :] - P1[0, :],
@@ -288,7 +318,7 @@ def triangulate_points(pt2d_1, pt2d_2, pt2d_3, stereo_data_1_2, stereo_data_1_3)
 
 
 def triangulate_all_keypoints(kp1_xy, kp1_conf, kp2_xy, kp2_conf,
-                               kp3_xy, kp3_conf, stereo_12, stereo_13):
+                               kp3_xy, kp3_conf, kp4_xy, kp4_conf, stereo_12, stereo_13, stereo_14):
     """
     Trianguliert alle 17 COCO-Keypoints zu 3D-Punkten.
 
@@ -300,7 +330,8 @@ def triangulate_all_keypoints(kp1_xy, kp1_conf, kp2_xy, kp2_conf,
             extract_landmark_2d(kp1_xy, kp1_conf, idx),
             extract_landmark_2d(kp2_xy, kp2_conf, idx),
             extract_landmark_2d(kp3_xy, kp3_conf, idx),
-            stereo_12, stereo_13
+            extract_landmark_2d(kp4_xy, kp4_conf, idx),
+            stereo_12, stereo_13, stereo_14
         )
         for idx in range(NUM_KEYPOINTS)
     ]
@@ -385,7 +416,7 @@ def build_display_grid(frames_labels):
 
 def main():
     print("=" * 55)
-    print("  YOLO26 Pose Tracking – 3-Kamera Stereo Setup")
+    print("  YOLO26 Pose Tracking – 4-Kamera Stereo Setup")
     print("=" * 55)
 
     # Modell
@@ -394,17 +425,20 @@ def main():
     # Kalibrierung
     stereo_12 = load_stereo_calibration_1_2()
     stereo_13 = load_stereo_calibration_1_3()
+    stereo_14 = load_stereo_calibration_1_4()
 
     # Kameras öffnen
     cam1 = xiapi.Camera(0)
     cam2 = xiapi.Camera(1)
     cam3 = xiapi.Camera(2)
+    cam4 = xiapi.Camera(3)
 
     ok1 = setup_camera(cam1, "Kamera 1 (Referenz)")
     ok2 = setup_camera(cam2, "Kamera 2")
     ok3 = setup_camera(cam3, "Kamera 3")
+    ok4 = setup_camera(cam4, "Kamera 4")
 
-    if not (ok1 and ok2 and ok3):
+    if not (ok1 and ok2 and ok3 and ok4):
         print("❌ Konnte nicht alle Kameras öffnen. Abbruch.")
         return
 
@@ -415,9 +449,9 @@ def main():
     frame_count = 0
     t_last = time.time()
 
-    cv2.namedWindow("YOLO26 Pose – 3 Kameras", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("YOLO26 Pose – 3 Kameras",
-                     DISPLAY_SIZE[0] * 3, DISPLAY_SIZE[1])
+    cv2.namedWindow("YOLO26 Pose – 4 Kameras", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("YOLO26 Pose – 4 Kameras",
+                     DISPLAY_SIZE[0] * 3, DISPLAY_SIZE[1]) #3->4?
 
     server_thread = threading.Thread(target=pose_server.run_server, daemon=True)
     server_thread.start()
@@ -429,6 +463,7 @@ def main():
             frame1 = capture_frame(cam1)
             frame2 = capture_frame(cam2)
             frame3 = capture_frame(cam3)
+            frame4 = capture_frame(cam4)
 
             if frame_count % FRAME_SKIP != 0:
                 continue
@@ -437,6 +472,8 @@ def main():
             kp1_xy, kp1_conf = run_yolo_pose(model, frame1)
             kp2_xy, kp2_conf = run_yolo_pose(model, frame2)
             kp3_xy, kp3_conf = run_yolo_pose(model, frame3)
+            kp4_xy, kp4_conf = run_yolo_pose(model, frame4)
+                        
 
             t_now = time.time()
             fps = 1.0 / max(t_now - t_last, 1e-6)
@@ -447,7 +484,8 @@ def main():
                 kp1_xy, kp1_conf,
                 kp2_xy, kp2_conf,
                 kp3_xy, kp3_conf,
-                stereo_12, stereo_13
+                kp4_xy, kp4_conf,
+                stereo_12, stereo_13, stereo_14
             )
 
             pose_server.send_pose_data(points_3d, fps=fps)
@@ -459,13 +497,16 @@ def main():
 
             draw_pose_yolo(frame3, kp3_xy, kp3_conf, show_labels)
 
+            draw_pose_yolo(frame4, kp4_xy, kp4_conf, show_labels)
+
             # 3-Kamera-Grid anzeigen
             grid = build_display_grid(
                 [(frame1, "Kamera 1"),
                  (frame2, "Kamera 2"),
-                 (frame3, "Kamera 3")]
+                 (frame3, "Kamera 3"),
+                 (frame4, "Kamera 4")]
             )
-            cv2.imshow("YOLO26 Pose – 3 Kameras", grid)
+            cv2.imshow("YOLO26 Pose – 4 Kameras", grid)
 
 
             # Tastatureingabe
@@ -482,7 +523,7 @@ def main():
 
     finally:
         print("🔒 Kameras werden geschlossen...")
-        for cam in (cam1, cam2, cam3):
+        for cam in (cam1, cam2, cam3, cam4):
             try:
                 cam.stop_acquisition()
                 cam.close_device()

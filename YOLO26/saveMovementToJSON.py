@@ -101,16 +101,17 @@ def get_sorted_frames(cam_dir: str) -> list[str]:
     return sorted(set(files), key=_natural_key)
 
 
-def align_frames(f1, f2, f3) -> list[tuple]:
+def align_frames(f1, f2, f3, f4) -> list[tuple]:
     m1 = {Path(f).stem: f for f in f1}
     m2 = {Path(f).stem: f for f in f2}
     m3 = {Path(f).stem: f for f in f3}
-    common = sorted(set(m1) & set(m2) & set(m3), key=_natural_key)
+    m4 = {Path(f).stem: f for f in f4}
+    common = sorted(set(m1) & set(m2) & set(m3) & set(m4), key=_natural_key)
     if not common:
-        sys.exit("[ERROR] Keine gemeinsamen Frame-Namen in cam1/cam2/cam3.")
+        sys.exit("[ERROR] Keine gemeinsamen Frame-Namen in cam1/cam2/cam3/cam4.")
     print(f"   {len(common)} gemeinsame Frames  "
-          f"(cam1:{len(m1)}  cam2:{len(m2)}  cam3:{len(m3)})")
-    return [(name, m1[name], m2[name], m3[name]) for name in common]
+          f"(cam1:{len(m1)}  cam2:{len(m2)}  cam3:{len(m3)})  cam4:{len(m4)})")
+    return [(name, m1[name], m2[name], m3[name], m4[name]) for name in common]
 
 
 # ─── YOLO Inferenz ─────────────────────────────────────────────────────────
@@ -182,7 +183,7 @@ def rescale_calibration_to_image(stereo: dict, actual_wh: tuple) -> tuple:
 
 # ─── Triangulation (DLT, identisch zur bewährten Version) ──────────────────
 
-def triangulate_point(pt1, pt2, pt3, s12: dict, s13: dict,
+def triangulate_point(pt1, pt2, pt3, pt4, s12: dict, s13: dict, s14: dict, 
                        max_reproj_error: float = 0.0) -> list | None:
     if pt1 is None or pt2 is None or pt3 is None:
         return None
@@ -192,14 +193,18 @@ def triangulate_point(pt1, pt2, pt3, s12: dict, s13: dict,
     R_12, T_12 = s12["R"], s12["T"].reshape(3, 1)
     K3, D3 = s13["K3"], s13["D3"]
     R_13, T_13 = s13["R"], s13["T"].reshape(3, 1)
+    K4, D4 = s14["K4"], s14["D4"]
+    R_14, T_14 = s14["R"], s14["T"].reshape(3, 1)
 
     P1 = K1 @ np.hstack([np.eye(3),  np.zeros((3, 1))])
     P2 = K2 @ np.hstack([R_12,       T_12])
     P3 = K3 @ np.hstack([R_13,       T_13])
+    P4 = K4 @ np.hstack([R_14,       T_14])
 
     pt1u = cv2.undistortPoints(pt1.reshape(1, 1, 2), K1, D1, P=K1).reshape(2)
     pt2u = cv2.undistortPoints(pt2.reshape(1, 1, 2), K2, D2, P=K2).reshape(2)
     pt3u = cv2.undistortPoints(pt3.reshape(1, 1, 2), K3, D3, P=K3).reshape(2)
+    pt4u = cv2.undistortPoints(pt4.reshape(1, 1, 2), K4, D4, P=K4).reshape(2)
 
     A = np.array([
         pt1u[0] * P1[2] - P1[0],
@@ -208,6 +213,8 @@ def triangulate_point(pt1, pt2, pt3, s12: dict, s13: dict,
         pt2u[1] * P2[2] - P2[1],
         pt3u[0] * P3[2] - P3[0],
         pt3u[1] * P3[2] - P3[1],
+        pt4u[0] * P4[2] - P4[0],
+        pt4u[1] * P4[2] - P4[1],
     ], dtype=np.float64)
 
     try:
@@ -229,6 +236,7 @@ def triangulate_point(pt1, pt2, pt3, s12: dict, s13: dict,
             (pt1, K1, D1, np.eye(3),  np.zeros((3, 1))),
             (pt2, K2, D2, R_12,       T_12),
             (pt3, K3, D3, R_13,       T_13),
+            (pt4, K4, D4, R_14,       T_14),
         ]:
             if _err(K, D, R, T) > max_reproj_error:
                 return None
@@ -237,14 +245,15 @@ def triangulate_point(pt1, pt2, pt3, s12: dict, s13: dict,
 
 
 def triangulate_frame(kp1_xy, kp1_conf, kp2_xy, kp2_conf,
-                       kp3_xy, kp3_conf, s12, s13,
+                       kp3_xy, kp3_conf, kp4_xy, kp4_conf, s12, s13, s14,
                        thr: float, max_reproj_error: float) -> list:
     return [
         triangulate_point(
             extract_landmark_2d(kp1_xy, kp1_conf, i, thr),
             extract_landmark_2d(kp2_xy, kp2_conf, i, thr),
             extract_landmark_2d(kp3_xy, kp3_conf, i, thr),
-            s12, s13, max_reproj_error,
+            extract_landmark_2d(kp4_xy, kp4_conf, i, thr),
+            s12, s13, s14, max_reproj_error,
         )
         for i in range(NUM_KEYPOINTS)
     ]
@@ -456,6 +465,7 @@ def main():
     parser.add_argument("--frames-dir",      required=True)
     parser.add_argument("--calib-12",        default="stereo_cam1_cam2.pkl")
     parser.add_argument("--calib-13",        default="stereo_cam1_cam3.pkl")
+    parser.add_argument("--calib-14",        default="stereo_cam1_cam4.pkl")
     parser.add_argument("--output",          default="animation.json")
     parser.add_argument("--model",           default="yolo26n-pose.pt")
     parser.add_argument("--fps",             type=float, default=20.0)
@@ -474,7 +484,7 @@ def main():
     args = parser.parse_args()
 
     frames_dir = os.path.expanduser(args.frames_dir)
-    cam_dirs = {k: os.path.join(frames_dir, k) for k in ("cam1", "cam2", "cam3")}
+    cam_dirs = {k: os.path.join(frames_dir, k) for k in ("cam1", "cam2", "cam3", "cam4")}
     for name, d in cam_dirs.items():
         if not os.path.isdir(d):
             sys.exit(f"[ERROR] Ordner nicht gefunden: {d}")
@@ -495,12 +505,14 @@ def main():
         get_sorted_frames(cam_dirs["cam1"]),
         get_sorted_frames(cam_dirs["cam2"]),
         get_sorted_frames(cam_dirs["cam3"]),
+        get_sorted_frames(cam_dirs["cam4"]),
     )
     n_frames = len(aligned)
 
     print("\n📂 Lade Kalibrierungen...")
     stereo_12 = load_calibration(args.calib_12, "2")
     stereo_13 = load_calibration(args.calib_13, "3")
+    stereo_14 = load_calibration(args.calib_14, "4")
 
     # Intrinsics auf die tatsächliche Bildauflösung skalieren.
     # Die Kalibrierung war bei voller Sensorauflösung; die Frames sind hier
@@ -512,6 +524,7 @@ def main():
     calib_wh = tuple(stereo_12["image_size"])
     sx, sy = rescale_calibration_to_image(stereo_12, actual_wh)
     rescale_calibration_to_image(stereo_13, actual_wh)
+    rescale_calibration_to_image(stereo_14, actual_wh)
     if abs(sx - 1.0) > 1e-6 or abs(sy - 1.0) > 1e-6:
         print(f"   ⚠️  Bildauflösung {actual_wh[0]}×{actual_wh[1]} ≠ "
               f"Kalibrierung {calib_wh[0]}×{calib_wh[1]}  →  "
@@ -528,12 +541,13 @@ def main():
 
     print(f"🔄 Verarbeite {n_frames} Frames...\n")
 
-    for idx, (name, p1, p2, p3) in enumerate(aligned):
+    for idx, (name, p1, p2, p3, p4) in enumerate(aligned):
         f1 = cv2.imread(p1)
         f2 = cv2.imread(p2)
         f3 = cv2.imread(p3)
+        f4 = cv2.imread(p4)
 
-        if f1 is None or f2 is None or f3 is None:
+        if f1 is None or f2 is None or f3 is None or f4 is None:
             print(f"   ⚠️  Bild nicht lesbar – Frame '{name}' übersprungen.")
             frames_3d.append([None] * NUM_KEYPOINTS)
             stats["no_person"] += NUM_KEYPOINTS
@@ -542,14 +556,15 @@ def main():
         kp1_xy, kp1_conf = run_yolo_pose(model, f1)
         kp2_xy, kp2_conf = run_yolo_pose(model, f2)
         kp3_xy, kp3_conf = run_yolo_pose(model, f3)
+        kp4_xy, kp4_conf = run_yolo_pose(model, f4)
 
-        if kp1_xy is None or kp2_xy is None or kp3_xy is None:
+        if kp1_xy is None or kp2_xy is None or kp3_xy is None or kp4_xy is None:
             frames_3d.append([None] * NUM_KEYPOINTS)
             stats["no_person"] += NUM_KEYPOINTS
         else:
             pts = triangulate_frame(
-                kp1_xy, kp1_conf, kp2_xy, kp2_conf, kp3_xy, kp3_conf,
-                stereo_12, stereo_13, args.kpt_thr, args.max_reproj_err,
+                kp1_xy, kp1_conf, kp2_xy, kp2_conf, kp3_xy, kp3_conf, kp4_xy, kp4_conf,
+                stereo_12, stereo_13, stereo_14, args.kpt_thr, args.max_reproj_err,
             )
             for i, pt in enumerate(pts):
                 if pt is not None:

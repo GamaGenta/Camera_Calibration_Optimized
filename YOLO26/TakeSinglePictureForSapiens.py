@@ -36,6 +36,7 @@ CAM_SERIALS = {
     "CUCAU1829019": 0,  # Cam1
     "CUCAU1829041": 1,  # Cam2
     "CUCAU1829031": 2,  # Cam3
+    #: 3,  # Cam4
 }
 
 # =========================
@@ -154,7 +155,7 @@ def take_single_shot(cams, session_dir, shot_idx):
 # =========================
 def main():
     # ── Kameras öffnen ──────────────────────────────────────────
-    raw_cams = [xiapi.Camera(0), xiapi.Camera(1), xiapi.Camera(2)]
+    raw_cams = [xiapi.Camera(0), xiapi.Camera(1), xiapi.Camera(2), xiapi.Camera(3)]
     serial_to_cam = {}
 
     for i, cam in enumerate(raw_cams):
@@ -168,11 +169,11 @@ def main():
     if not all(sn in CAM_SERIALS for sn in serial_to_cam):
         print("⚠️  Unbekannte Seriennummern — bitte CAM_SERIALS aktualisieren.")
         print("   Gefundene SNs:", list(serial_to_cam.keys()))
-        print("   Nutze Reihenfolge wie erkannt (0, 1, 2)…")
+        print("   Nutze Reihenfolge wie erkannt (0, 1, 2, 3)…")
         cams = list(serial_to_cam.values())
     else:
         slot_to_cam = {CAM_SERIALS[sn]: cam for sn, cam in serial_to_cam.items()}
-        cams = [slot_to_cam[i] for i in range(3)]
+        cams = [slot_to_cam[i] for i in range(4)] #range 3 -> 4
         print("✅ Kameras korrekt sortiert nach Seriennummer")
 
     # ── Neuer Aufnahme-Ordner (Zeitstempel) ─────────────────────
@@ -180,7 +181,7 @@ def main():
         SAVE_BASE, "single_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
     for i in range(len(cams)):
         os.makedirs(os.path.join(session_dir, f"cam{i+1}"), exist_ok=True)
-    print(f"📁 Speicherordner: {session_dir}  (cam1/ cam2/ cam3/)")
+    print(f"📁 Speicherordner: {session_dir}  (cam1/ cam2/ cam3/ cam4/)")
 
     # ── Vorschaufenster ─────────────────────────────────────────
     WIN = "Vorschau  |  SPACE = Foto (5s Countdown)  |  Q / ESC = Beenden"

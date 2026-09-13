@@ -32,6 +32,7 @@ PAIRS = [
     # (ref_cam, other_cam, ordner)
     (1, 2, "calib_1_2"),
     (1, 3, "calib_1_3"),
+    (1, 4, "calib_1_4"),
 ]
 
 
@@ -119,7 +120,8 @@ def calibrate_pair(ref, other, folder, board, detector):
     K2, D2 = moth["K"], moth["D"]
     crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 300, 1e-9)
 
-    rms, K1, D1, K2, D2, R, T, E, F = cv2.stereoCalibrate(
+    #---------------------------------------------------------------------
+    rms, K1, D1, K2, D2, R, T, E, F = cv2.stereoCalibrate( 
         obj, rp, op, K1, D1, K2, D2, image_size,
         criteria=crit, flags=cv2.CALIB_FIX_INTRINSIC
     )

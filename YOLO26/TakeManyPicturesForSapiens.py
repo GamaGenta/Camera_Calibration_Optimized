@@ -37,6 +37,7 @@ CAM_SERIALS = {
     "CUCAU1829019": 0,  # Cam1
     "CUCAU1829041": 1,  # Cam2
     "CUCAU1829031": 2,  # Cam3
+    #: 3, Cam4 <--------------------------------------------------------------------------------
 }
 
 # =========================
@@ -172,7 +173,7 @@ def take_burst(cams, burst_idx):
 # =========================
 def main():
     # ── Kameras öffnen ──────────────────────────────────────────
-    raw_cams = [xiapi.Camera(0), xiapi.Camera(1), xiapi.Camera(2)]
+    raw_cams = [xiapi.Camera(0), xiapi.Camera(1), xiapi.Camera(2), xiapi.Camera(3)] #<---------------------------------------------
     serial_to_cam = {}
 
     for i, cam in enumerate(raw_cams):

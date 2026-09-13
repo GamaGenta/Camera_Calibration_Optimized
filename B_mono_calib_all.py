@@ -33,9 +33,10 @@ import calib_common as cc
 
 # Fuer jede Kamera: Ordner mit Bildern (Dateinamen camN_*.png)
 CAMERA_SOURCES = {
-    1: ["calib_1_2", "calib_1_3", "calib_single_1"],
+    1: ["calib_1_2", "calib_1_3", "calib_1_4", "calib_single_1"],
     2: ["calib_1_2", "calib_single_2"],
     3: ["calib_1_3", "calib_single_3"],
+    4: ["calib_1_4", "calib_single_4"],
 }
 
 MIN_VIEWS = 12          # unter diesem Wert ist Intrinsics-Schaetzung unsicher
@@ -167,7 +168,7 @@ def main():
     board = cc.make_board()
     detector = cc.make_detector(board)
     summary = {}
-    for cam in (1, 2, 3):
+    for cam in (1, 2, 3, 4):
         summary[cam] = calibrate_camera(cam, board, detector)
 
     print("\n" + "=" * 64)

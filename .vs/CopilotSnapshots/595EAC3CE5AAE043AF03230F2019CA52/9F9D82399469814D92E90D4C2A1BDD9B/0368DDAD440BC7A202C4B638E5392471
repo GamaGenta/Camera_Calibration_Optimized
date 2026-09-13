@@ -1,4 +1,4 @@
-"""
+﻿"""
 E_bundle_adjust.py
 ==================
 Globales Bundle Adjustment ueber alle drei Kameras.
@@ -111,7 +111,7 @@ def residuals(params, shots, K, D):
     rvec14 = params[12:15]; tvec14 = params[15:18]
     ext = {2: (rvec12, tvec12), 3: (rvec13, tvec13), 4: (rvec14, tvec14)}
     res = []
-    base = 18  # es gibt 18 Extrinsic-Parameter: (r,t) fuer Cam2,Cam3,Cam4 (3+3 each). Von 12 auf 18 gehändert 
+    base = 12 #12->18 werte?
     for k, s in enumerate(shots):
         rvec_b = params[base + 6*k: base + 6*k + 3]
         tvec_b = params[base + 6*k + 3: base + 6*k + 6]
@@ -134,8 +134,7 @@ def sparsity(shots):
         n = sum(2 * len(img) for _, (_, img) in s["obs"].items())
         counts.append((rows, n, s))
         rows += n
-    # 18 Extrinsic-Parameter (3+3 fuer jede der Cam2, Cam3, Cam4) plus 6 pro Shot
-    ncols = 18 + 6 * len(shots)
+    ncols = 12 + 6 * len(shots)
     M = lil_matrix((rows, ncols), dtype=int)
     base = 12
     for k, (r0, n, s) in enumerate(counts):
@@ -204,7 +203,7 @@ def main():
     # Ergebnis-Extrinsics
     R12 = cv2.Rodrigues(sol.x[0:3])[0]; T12 = sol.x[3:6].reshape(3, 1)
     R13 = cv2.Rodrigues(sol.x[6:9])[0]; T13 = sol.x[9:12].reshape(3, 1)
-    R14 = cv2.Rodrigues(sol.x[12:15])[0]; T14 = sol.x[15:18].reshape(3, 1)
+    R14 = cv2.Rodrigues(sol.x[12:15])[0]; T14 = sol.x[15:18].reshape(4, 1) #
     R23 = R13 @ R12.T
     T23 = T13 - R23 @ T12
     R34 = R14 @ R13.T
@@ -215,11 +214,11 @@ def main():
           f"Winkel {decompose(R12,'12'):.2f}°")
     print(f"Cam1->Cam3: Baseline {np.linalg.norm(T13):.4f} m  "
           f"Winkel {decompose(R13,'13'):.2f}°")
-    print(f"Cam1->Cam4: Baseline {np.linalg.norm(T14):.4f} m  "
+    print(f"Cam1->Cam3: Baseline {np.linalg.norm(T14):.4f} m  "
           f"Winkel {decompose(R14,'14'):.2f}°")
     print(f"Cam2->Cam3: Baseline {np.linalg.norm(T23):.4f} m  "
           f"Winkel {decompose(R23,'23'):.2f}°  (verkettet)")
-    print(f"Cam3->Cam4: Baseline {np.linalg.norm(T34):.4f} m  "
+    print(f"Cam2->Cam3: Baseline {np.linalg.norm(T34):.4f} m  "
           f"Winkel {decompose(R34,'34'):.2f}°  (verkettet)")
 
     out = dict(

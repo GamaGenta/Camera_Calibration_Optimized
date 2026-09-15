@@ -1,4 +1,4 @@
-"""
+﻿"""
 E_bundle_adjust.py
 ==================
 Globales Bundle Adjustment ueber alle drei Kameras.
@@ -137,7 +137,7 @@ def sparsity(shots):
     # 18 Extrinsic-Parameter (3+3 fuer jede der Cam2, Cam3, Cam4) plus 6 pro Shot
     ncols = 18 + 6 * len(shots)
     M = lil_matrix((rows, ncols), dtype=int)
-    base = 18 #<---------------------------------------------------------------------------------------- 12->18
+    base = 12
     for k, (r0, n, s) in enumerate(counts):
         r = r0
         for c, (_, img) in s["obs"].items():
@@ -169,7 +169,8 @@ def main():
     n2 = sum(1 for s in shots if 2 in s["obs"])
     n3 = sum(1 for s in shots if 3 in s["obs"])
     n4 = sum(1 for s in shots if 4 in s["obs"]) #n4
-    print(f"  {len(shots)} Shots (mit Cam2: {n2}, mit Cam3: {n3}, mit Cam4: {n4})")
+    print(f"  {len(shots)} Shots (mit Cam2: {n2}, mit Cam3: {n3})")
+    print(f"  {len(shots)} Shots (mit Cam3: {n3}, mit Cam4: {n4})")
     if len(shots) < 5:
         print("Zu wenige Shots fuer BA."); return
 
@@ -188,18 +189,71 @@ def main():
     print(f"\nStart-Reprojektion (global) RMS: {rms0:.4f} px  "
           f"({len(r0)//2} Punktbeobachtungen)")
 
+    # Per-Kamera Statistik (Anzahl Beobachtungen und RMS)
+    def per_camera_stats(params, shots_list):
+        cams = {1: [], 2: [], 3: [], 4: []}
+        base = 18
+        for s_idx, s in enumerate(shots_list):
+            rvec_b = params[base + 6*s_idx: base + 6*s_idx + 3]
+            tvec_b = params[base + 6*s_idx + 3: base + 6*s_idx + 6]
+            for c, (obj, img) in s["obs"].items():
+                if c == 1:
+                    rv, tv = rvec_b, tvec_b
+                else:
+                    rv, tv, *_ = cv2.composeRT(rvec_b, tvec_b, ext0[(c-2)*6:(c-1)*6] if False else params[0:0], ext0[(c-2)*6:(c-1)*6] if False else params[0:0])
+                    # simpler: use current extrinsics from initial ext0 values
+                    rv, tv, *_ = cv2.composeRT(rvec_b, tvec_b,
+                                              params[0 + (c-2)*6:0 + (c-2)*6 + 3] if False else ext0[(c-2)*6:(c-2)*6+3],
+                                              params[3 + (c-2)*6:3 + (c-2)*6 + 3] if False else ext0[(c-2)*6+3:(c-2)*6+6])
+                    rv = rv.ravel(); tv = tv.ravel()
+                proj, _ = cv2.projectPoints(obj.reshape(-1, 1, 3), rv, tv, K[c], D[c])
+                errs = np.linalg.norm((proj.reshape(-1, 2) - img), axis=1)
+                cams[c].extend(list(errs))
+        stats = {}
+        for c in cams:
+            arr = np.array(cams[c]) if len(cams[c]) > 0 else np.array([])
+            stats[c] = dict(count=len(arr), rms=(np.sqrt(np.mean(arr**2)) if arr.size else None))
+        return stats
+
+    stats0 = per_camera_stats(p0, shots)
+    print("Per-Kamera Start-Fehler:")
+    for c in sorted(stats0.keys()):
+        s = stats0[c]
+        print(f"  Cam{c}: {s['count']} Beobachtungen, RMS: {s['rms']:.4f}" if s['rms'] is not None else f"  Cam{c}: {s['count']} Beobachtungen, RMS: n/a")
+
     J = sparsity(shots)
     print("Optimiere (Levenberg-Marquardt, sparse) ...")
     sol = least_squares(
         residuals, p0, jac_sparsity=J, method="trf",
         x_scale="jac", loss="huber", f_scale=1.0,
         args=(shots, K, D), verbose=2, max_nfev=80,
-        #args=(shots, K, D), verbose=2, max_nfev=20000,
     )
     r1 = residuals(sol.x, shots, K, D)
     rms1 = np.sqrt(np.mean(r1 ** 2))
     print(f"\nEnd-Reprojektion (global) RMS:   {rms1:.4f} px  "
           f"(Start {rms0:.4f})")
+    print(f"Optimierungs-Funktionsauswertungen: {sol.nfev}")
+
+    # Testlauf ohne Cam4 (Filtere alle Beobachtungen von Kamera 4 raus)
+    shots_no4 = []
+    for s in shots:
+        obs_f = {c: v for c, v in s['obs'].items() if c != 4}
+        if 1 in obs_f and len(obs_f) >= 2:
+            shots_no4.append(dict(ts=s['ts'], folder=s['folder'], obs=obs_f, rvec=s['rvec'], tvec=s['tvec']))
+    if len(shots_no4) != len(shots):
+        print('\nFahre Vergleich ohne Kamera 4 durch ...')
+        p0_no4 = pack(ext0, shots_no4)
+        J_no4 = sparsity(shots_no4)
+        sol_no4 = least_squares(
+            residuals, p0_no4, jac_sparsity=J_no4, method="trf",
+            x_scale="jac", loss="huber", f_scale=1.0,
+            args=(shots_no4, K, D), verbose=2, max_nfev=20000, xtol=1e-8, ftol=1e-8, gtol=1e-8,
+        )
+        r_no4 = residuals(sol_no4.x, shots_no4, K, D)
+        rms_no4 = np.sqrt(np.mean(r_no4 ** 2))
+        print(f"\nEnd-Reprojektion ohne Cam4 RMS: {rms_no4:.4f} px  (Funktionsauswertungen: {sol_no4.nfev})")
+    else:
+        print('\nKeine Beobachtungen von Cam4 gefunden; Vergleich ohne Cam4 uebersprungen.')
 
     # Ergebnis-Extrinsics
     R12 = cv2.Rodrigues(sol.x[0:3])[0]; T12 = sol.x[3:6].reshape(3, 1)
@@ -221,7 +275,7 @@ def main():
           f"Winkel {decompose(R14,'14'):.2f}°")
     print(f"Cam2->Cam3: Baseline {np.linalg.norm(T23):.4f} m  "
           f"Winkel {decompose(R23,'23'):.2f}°  (verkettet)")
-    print(f"Cam2->Cam4: Baseline {np.linalg.norm(T24):.4f} m  "
+    print(f"Cam3->Cam4: Baseline {np.linalg.norm(T24):.4f} m  "
           f"Winkel {decompose(R24,'24'):.2f}°  (verkettet)")
     print(f"Cam3->Cam4: Baseline {np.linalg.norm(T34):.4f} m  "
           f"Winkel {decompose(R34,'34'):.2f}°  (verkettet)")

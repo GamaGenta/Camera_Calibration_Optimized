@@ -39,18 +39,21 @@ Synchrone, geführte Aufnahme aller drei Kameras mit Coverage-Tracking.
 | Taste | Aktion |
 |-------|--------|
 | `p` | Alle Kameras aufnehmen |
-| `6` / `7` / `8` | Einzelne Kamera aufnehmen |
+| `6` / `7` / `8` / `9` | Einzelne Kamera aufnehmen |
 | `2` | Paar CAM1 + CAM2 |
 | `3` | Paar CAM1 + CAM3 |
+| `4` | Paar CAM1 + CAM4 |
+
 | `q` | Beenden |
 
 **Ziel:** Möglichst gleichmäßige Abdeckung des Bildbereichs (Coverage ≥ 55 % empfohlen). Aufgenommene Bildanzahl pro Kamera:
 
-| Kamera | Aufnahmen |
-|--------|-----------|
-| CAM1 | 148 |
-| CAM2 | 69 |
-| CAM3 | 79 |
+| Kamera | Aufnahmen | End-Coverrage |
+|--------|-----------|---------------|
+| CAM1 | 59 | 100% |
+| CAM2 | 23 | 100% |
+| CAM3 | 28 | 96% |
+| CAM4 | 29 | 77% |
 
 ---
 
@@ -62,17 +65,19 @@ Intrinsische Kalibrierung jeder Kamera einzeln mit dem Pinhole-Modell (5 Verzerr
 
 | Kamera | Views | RMS (px) | Coverage | fₓ (px) | fᵧ (px) | cₓ (px) | cᵧ (px) | Ausgabe |
 |--------|-------|----------|----------|---------|---------|---------|---------|---------|
-| CAM1 | 117 | 0,2500 | 96 % | 2299,8 | 2301,6 | 2086,3 | 1520,3 | `mono_cam1.pkl` |
-| CAM2 | 61 | 0,2824 | 79 % | 2273,9 | 2273,3 | 2045,4 | 1503,8 | `mono_cam2.pkl` |
-| CAM3 | 67 | 0,2697 | 75 % | 2286,5 | 2291,7 | 2109,8 | 1458,8 | `mono_cam3.pkl` |
+| CAM1 | 37 | 0,2944 | 96 % | 2291,9 | 2294,3 | 2074,9 | 1528.4 | `mono_cam1.pkl` |
+| CAM2 | 19 | 0,2678 | 83 % | 2286,9 | 2278,5 | 2102,9 | 1501,3 | `mono_cam2.pkl` |
+| CAM3 | 26 | 0,4187 | 96 % | 2264,4 | 2264,6 | 2056,2 | 1505,5 | `mono_cam3.pkl` |
+| CAM4 | 29 | 0,2218 | 77 % | 1750,6 | 1748,4 | 2056,7 | 1508,7 | `mono_cam4.pkl` |
 
 **Verzerrungskoeffizienten D = [k₁, k₂, p₁, p₂, k₃]:**
 
 | Kamera | k₁ | k₂ | p₁ | p₂ | k₃ |
 |--------|----|----|----|----|-----|
-| CAM1 | −0,00234 | −0,05508 | −0,00082 | 0,00041 | 0,01770 |
-| CAM2 | −0,01370 | −0,04536 | −0,00028 | 0,00002 | 0,01451 |
-| CAM3 | −0,01984 | −0,03215 | −0,00135 | 0,00112 | 0,00330 |
+| CAM1 | -0,01233 | −0,0435 | 0,00059 | 0,0009 | 0,01221 |
+| CAM2 | −0,01663 | −0,04106 | 0,00027 | 0,00088 | 0,01097 |
+| CAM3 | −0,01811 | −0,04185 | 0,00005 | -0,00046 | 0,01282 |
+| CAM4 | −0,2147 | −0,1327 | −0,00091 | -0,00024 | -0,02823 |
 
 > **Hinweis:** Niedriger RMS allein ist kein Qualitätsbeweis. Auf ausreichende View-Zahl (≥ 12) und Coverage (≥ 55 %) achten. Alle drei Kameras erfüllen diese Kriterien.
 
@@ -86,15 +91,18 @@ Paarweise extrinsische Kalibrierung via `stereoCalibrate` auf Basis synchroner B
 
 | Paar | Paare gesamt | Paare genutzt | RMS (px) | Epipolarfehler Ø (px) | Epipolarfehler Median (px) | Baseline (m) | Drehwinkel | Ausgabe |
 |------|-------------|---------------|----------|-----------------------|---------------------------|--------------|------------|---------|
-| CAM1–CAM2 | 69 | 58 | 0,981 | 9,672 | 3,442 | 3,727 | 135,96° | `stereo_cam1_cam2.pkl` |
-| CAM1–CAM3 | 79 | 64 | 0,547 | 1,604 | 0,810 | 2,307 | 71,11° | `stereo_cam1_cam3.pkl` |
+| CAM1–CAM2 | 17 | 14 | 0,7388 | 5,6138 | 3,1087 | 2,3112 | 71,04° | `stereo_cam1_cam2.pkl` |
+| CAM1–CAM3 | 23 | 14 | 1,0350 | 7,0738 | 3,6435 | 3,6986 | 136,34° | `stereo_cam1_cam3.pkl` | 
+| CAM1–CAM4 | 16 | 7 | 0,4936 | 23,9960 | 17,6794 | 3,3718 | 128,86° | `stereo_cam1_cam4.pkl` |
 
 **Translationsvektoren (CAM1-Ursprung):**
 
 ```
 T(CAM1→CAM2) = [ 1.9016, -2.0370,  2.4745 ] m
-T(CAM1→CAM3) = [-1.2905, -1.1566,  1.5218 ] m
+T(CAM1→CAM3) = [-1.2905, -1.1566,  1.5218 ] m 
+T(CAM1→CAM4) = [-1.1901, -1.7608,  2.6176 ] m
 ```
+
 
 > **Hinweis:** Der erhöhte mittlere Epipolarfehler bei CAM1–CAM2 (9,67 px vs. Median 3,44 px) deutet auf einzelne Ausreißer-Paare hin. Ursache ist vermutlich die große Baseline (3,73 m) in Kombination mit dem extremen Drehwinkel (136°).
 
@@ -108,18 +116,22 @@ Triangulation bekannter 3D-Punkte (ChArUco-Eckpunkte) und Vergleich mit Referenz
 
 | Paar | Frames | Skalenfehler | Residuum Ø (mm) | Residuum Median (mm) | Residuum Max (mm) | Tiefe Z Ø (m) | Tiefenbereich (m) |
 |------|--------|-------------|-----------------|----------------------|-------------------|---------------|-------------------|
-| CAM1–CAM2 | 57 | 0,04 % | 0,80 | 0,74 | 1,66 | 2,80 | 0,91 – 4,36 |
-| CAM1–CAM3 | 63 | 0,03 % | 0,81 | 0,69 | 2,74 | 2,60 | 0,80 – 3,70 |
+| CAM1–CAM2 | 14 | 0,04 % | 0,64 | 0,56 | 1,10 | 2,39 | 0,58 – 3,34 |
+| CAM1–CAM3 | 14 | 0,01 % | 0,93 | 0,81 | 1,81 | 1,91 | 0,89 – 4,58 |
+| CAM1–CAM4 | 7 | 0,02 % | 0,82 | 0,81 | 1,20 | 3,23 | 1,98 – 4,31 |
 
 **Mehrkamera-Konsistenz (abgeleitet, CAM1 als Hub):**
 
 | Paar | Baseline (m) | Drehwinkel |
 |------|-------------|------------|
-| CAM1–CAM2 | 3,727 | 136,0° |
-| CAM1–CAM3 | 2,306 | 71,1° |
-| CAM2–CAM3 | 4,362 | 154,2° (verkettet) |
+| CAM1–CAM2 | 3,727 | 71,0° |
+| CAM1–CAM3 | 2,306 | 136,3° |
+| CAM1–CAM4 | 3,372 | 128,9° |
+| CAM2–CAM3 | 4,362 | 153,7° (verkettet) |
+| CAM2–CAM4 | 4,362 | 58,6° (verkettet) |
+| CAM3–CAM4 | 4,362 | 95,3° (verkettet) |
 
-> Skalenfehler < 0,05 % und mittlere 3D-Residuen von ~0,8 mm bei ~2,7 m Arbeitstiefe entsprechen einer relativen Genauigkeit von ca. **1 : 3300**.
+> Skalenfehler < 0,03 % und mittlere 3D-Residuen von ~0,8 mm bei ~2,5 m Arbeitstiefe entsprechen einer relativen Genauigkeit von ca. **1 : 3125**.
 
 ---
 
@@ -127,21 +139,24 @@ Triangulation bekannter 3D-Punkte (ChArUco-Eckpunkte) und Vergleich mit Referenz
 
 Gemeinsame Optimierung aller Kameraposen und Punktbeobachtungen (Levenberg-Marquardt, sparse). CAM1 als fester Ursprung.
 
-**Eingabe:** 120 Aufnahmen, 15.412 Punktbeobachtungen (CAM2: 57, CAM3: 63 Frames)
+**Eingabe:** 35 Aufnahmen, 4.624 Punktbeobachtungen (CAM2: 14, CAM3: 14, CAM4: 7 Frames)
 
 | Metrik | Vorher | Nachher |
 |--------|--------|---------|
-| Globaler RMS | 2,6700 px | 0,6317 px |
-| Kostenfunktion | 2,99 × 10⁴ | 4,82 × 10³ |
-| Iterationen | – | 76 |
+| Globaler RMS | 2,2723 px | 0,6131 px |
+| Kostenfunktion | 8,6327 × 10³ | 1,3876 × 10³ |
+| Iterationen | – | 78 |
 
 **Global optimierte Kamerageometrie:**
 
 | Paar | Baseline (m) | Drehwinkel |
 |------|-------------|------------|
-| CAM1–CAM2 | 3,7277 | 135,97° |
-| CAM1–CAM3 | 2,3074 | 71,12° |
+| CAM1–CAM2 | 3,7277 | 71,04° |
+| CAM1–CAM3 | 2,3074 | 136,3° |
+| CAM1–CAM4 | 3,3728 | 128,90° |
 | CAM2–CAM3 | 4,3632 | 154,14° (verkettet) |
+| CAM2–CAM4 | 4,3632 | 58,60° (verkettet) |
+| CAM3–CAM4 | 4,3632 | 95,30° (verkettet) |
 
 > Die Optimierung wurde durch Erreichen des Iterationslimits (80 Funktionsauswertungen) beendet, nicht durch Divergenz. Der monotone Kostenabfall ohne Instabilitäten sowie die Übereinstimmung der optimierten Baselines mit den Stereokalibrierwerten (Abweichung < 0,3 %) bestätigen die globale Konsistenz des Kameranetzes.
 
@@ -154,8 +169,10 @@ Gemeinsame Optimierung aller Kameraposen und Punktbeobachtungen (Levenberg-Marqu
 | `mono_cam1.pkl` | Intrinsische Parameter CAM1 |
 | `mono_cam2.pkl` | Intrinsische Parameter CAM2 |
 | `mono_cam3.pkl` | Intrinsische Parameter CAM3 |
+| `mono_cam4.pkl` | Intrinsische Parameter CAM4 |
 | `stereo_cam1_cam2.pkl` | Extrinsische Parameter CAM1–CAM2 |
 | `stereo_cam1_cam3.pkl` | Extrinsische Parameter CAM1–CAM3 |
+| `stereo_cam1_cam4.pkl` | Extrinsische Parameter CAM1–CAM4 |
 
 ---
 

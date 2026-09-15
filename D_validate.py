@@ -181,6 +181,13 @@ def multicam_consistency():
     base34 = float(np.linalg.norm(T34))
     ang34 = float(np.degrees(np.arccos(np.clip((np.trace(R34) - 1) / 2, -1, 1))))
 
+    # Verkettung Cam3 -> Cam4 : X_c3 = R14 (R14^T (X_c3 - T13)) + T14
+    R24 = R14 @ R12.T
+    T24 = T14 - R24 @ T12
+    # Kennzahlen berechnen
+    base24 = float(np.linalg.norm(T24))
+    ang24 = float(np.degrees(np.arccos(np.clip((np.trace(R24) - 1) / 2, -1, 1))))
+
 
 
     print(f"Baseline Cam1-Cam2: {s12['baseline']:.3f} m  "
@@ -190,19 +197,13 @@ def multicam_consistency():
     print(f"Baseline Cam1-Cam4: {s14['baseline']:.3f} m  "
           f"(Winkel {s14['rel_angle_deg']:.1f}°)")
     print(f"-> abgeleitet Cam2-Cam3: {base23:.3f} m  (Winkel {ang23:.1f}°)")
+    print(f"-> abgeleitet Cam2-Cam4: {base24:.3f} m  (Winkel {ang24:.1f}°)")
     print(f"-> abgeleitet Cam3-Cam4: {base34:.3f} m  (Winkel {ang34:.1f}°)")
 
-    print("\nHINWEIS: Es existiert keine direkte 2-3-Aufnahme. Daher kann der")
+    print("\nHINWEIS: Es existiert keine direkte 2-3-Aufnahme, 3-4-Aufnahme. Daher kann der")
     print("A->B->C- gegen A->C-Vergleich NICHT validiert werden. Fuer einen")
     print("echten Konsistenztest werden Aufnahmen benoetigt, in denen das")
-    print("Board gleichzeitig von Cam2 UND Cam3 (idealerweise allen dreien)")
-    print("gesehen wird -> globale Bundle Adjustment-Stufe (E_bundle_adjust.py).")
-
-    
-    print("\nHINWEIS: Es existiert keine direkte 3-4-Aufnahme. Daher kann der")
-    print("A->B->C- gegen A->C-Vergleich NICHT validiert werden. Fuer einen")
-    print("echten Konsistenztest werden Aufnahmen benoetigt, in denen das")
-    print("Board gleichzeitig von Cam3 UND Cam4 (idealerweise allen dreien)")
+    print("Board gleichzeitig von Cam2 UND Cam3, Cam3 UND Cam4 (idealerweise allen dreien)")
     print("gesehen wird -> globale Bundle Adjustment-Stufe (E_bundle_adjust.py).")
 
 

@@ -2,7 +2,8 @@ import pickle
 
 i = 2
 while i <=4:
-    file = 'stereo_cam1_cam' + str(i) + '.pkl'
+    #file = 'stereo_cam1_cam' + str(i) + '.pkl'
+    file = 'multicam_bundle.pkl'
     print(file)
     with open(file, 'rb') as f:
     #with open(f"stereo_cam1_cam{i}.pkl", 'rb') as f:

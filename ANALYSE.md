@@ -116,7 +116,7 @@ Loop-Closure-Konsistenzprüfung und ein vollwertiges 3-View-Bundle-Adjustment m�
 
 Paarweise Stereokalibrierung ist für 3 Kameras suboptimal (jedes Paar isoliert minimiert).
 Implementiert ist ein **globales Bundle Adjustment** (Cam1 als Anker), das den
-Gesamt-Reprojektionsfehler über alle Kameras und Aufnahmen gemeinsam minimiert
+Gesamt-Reprojektionsfehler über alle Kameras und Aufnahmen gemeinsam minimiert <-----------------------------------------
 (scipy `least_squares`, sparse Jacobian, Huber-Loss). Cam1 verankert das System, weil es in
 jeder Aufnahme sichtbar ist.
 
@@ -128,7 +128,7 @@ Verkettung. Mit nachgeholten Daten wird das BA das gesamte Rig echt global löse
 ## 7. Triangulations-Validierung (`D_validate.py`)
 
 Für MoCap entscheidend, nicht der Reprojektionsfehler. Der Test trianguliert die in beiden
-Kameras sichtbaren ChArUco-Ecken und vergleicht mit der bekannten Board-Geometrie:
+Kameras sichtbaren ChArUco-Ecken und vergleicht mit der bekannten Board-Geometrie: <-----------------------------------------
 - **Skalenfehler (%)** → metrische Korrektheit (hängt direkt an `SQUARE_LENGTH`!)
 - **3D-Residuum (mm)** nach starrer Ausrichtung → Triangulationsgenauigkeit
 - **rekonstruierte Tiefe Z (m)** → Arbeitsbereich

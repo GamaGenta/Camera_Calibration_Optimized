@@ -27,6 +27,7 @@ Tests
 Aufruf:  python D_validate.py
 """
 
+import csv
 import os
 import glob
 import pickle
@@ -35,6 +36,7 @@ import cv2
 
 import calib_common as cc
 
+sc_per_camera = {}
 
 def load(name):
     with open(name, "rb") as f:
@@ -136,9 +138,14 @@ def report_triangulation(name, res):
         print(f"\n[{name}] Keine triangulierbaren Frames.")
         return
     sc = res["scale"]
+    sc_arr = np.asarray(sc, dtype=float)
+    sc_per_camera[name] = sc_arr # Saklenfaktor speichern 
+    # sc_per_camera[f"{name}_fehler" = sc_arr
+    print(sc)
     print(f"\n[{name}] Triangulationstest ({res['n_frames']} Frames)")
     print(f"   Skalenfaktor (rec/true):  {sc.mean():.4f} "
           f"-> Skalenfehler {abs(sc.mean()-1)*100:.2f} %")
+    print(f"   Skalenfaktoren {sc}")
     print(f"   3D-Residuum (starr):      mean={res['resid_mm'].mean():.2f} mm "
           f"median={np.median(res['resid_mm']):.2f} mm "
           f"max={res['resid_mm'].max():.2f} mm")
@@ -147,6 +154,62 @@ def report_triangulation(name, res):
     if abs(sc.mean() - 1) > 0.02:
         print("   ⚠️  >2% Skalenfehler -> SQUARE_LENGTH/MARKER_LENGTH am Druck "
               "nachmessen!")
+
+'''
+def export_sc_abs_csv(filename, sep=';'):
+    with open(filename, 'w', encoding='utf-8', newline='') as fout:
+        writer = csv.writer(fout, delimiter=sep, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(['camera', 'index', 'sc', 'abs_sc'])
+        for name, arr in sc_per_camera.items():
+            for i, val in enumerate(arr):
+                writer.writerow([name, i, f"{val:.6f}", f"{abs(val):.6f}"])
+'''
+
+def export_sc_and_errors_csv(filename, sc_per_camera, sep=';', decimal_comma=True, include_summary=True):
+    """
+    sc_per_camera: dict {camera_name: array_like_of_scales}
+    Schreibt CSV mit Semikolon-Trenner und Dezimalkomma:
+    Spalten: camera;index;sc;abs_error;abs_error_percent
+    Am Ende: per-camera Summary (mean/median/min/max) und Gesamt-Summary.
+    """
+    def fmt(x, f="{:.6f}"):
+        s = f.format(float(x))
+        return s.replace('.', ',') if decimal_comma else s
+
+    with open(filename, 'w', encoding='utf-8', newline='') as fout:
+        writer = csv.writer(fout, delimiter=sep, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(['camera', 'index', 'sc', 'abs_error', 'abs_error_percent'])
+        for name, arr in sc_per_camera.items():
+            arr = np.asarray(arr, dtype=float)
+            abs_err = np.abs(arr - 1.0)
+            for i, (s, ae) in enumerate(zip(arr, abs_err)):
+                writer.writerow([name, i, fmt(s), fmt(ae), fmt(ae * 100, "{:.3f}")])
+
+        if include_summary:
+            writer.writerow([])
+            writer.writerow(['camera', 'mean_abs_error', 'mean_abs_error_percent', 'median_abs_error', 'min_abs_error', 'max_abs_error'])
+            all_abs = []
+            for name, arr in sc_per_camera.items():
+                arr = np.asarray(arr, dtype=float)
+                abs_err = np.abs(arr - 1.0)
+                all_abs.append(abs_err)
+                writer.writerow([name,
+                                 fmt(abs_err.mean() if abs_err.size else 0.0),
+                                 fmt(abs_err.mean() * 100 if abs_err.size else 0.0, "{:.3f}"),
+                                 fmt(np.median(abs_err) if abs_err.size else 0.0),
+                                 fmt(abs_err.min() if abs_err.size else 0.0),
+                                 fmt(abs_err.max() if abs_err.size else 0.0)])
+            if all_abs:
+                all_abs = np.concatenate([a for a in all_abs if a.size])
+                if all_abs.size:
+                    writer.writerow([])
+                    writer.writerow(['ALL',
+                                     fmt(all_abs.mean()),
+                                     fmt(all_abs.mean() * 100, "{:.3f}"),
+                                     fmt(np.median(all_abs)),
+                                     fmt(all_abs.min()),
+                                     fmt(all_abs.max())])
+
 
 
 # ----------------------------------------------------------------------
@@ -206,6 +269,7 @@ def multicam_consistency():
     print("Board gleichzeitig von Cam2 UND Cam3, Cam3 UND Cam4 (idealerweise allen dreien)")
     print("gesehen wird -> globale Bundle Adjustment-Stufe (E_bundle_adjust.py).")
 
+    
 
 def main():
     board = cc.make_board()
@@ -224,6 +288,9 @@ def main():
         report_triangulation(f"Cam{ref}-Cam{other}", res)
 
     multicam_consistency()
+
+    # export_sc_abs_csv('sc_abs_per_camera.csv') # save Skalenfehler und faktor
+    export_sc_and_errors_csv('sc_with_errors.csv', sc_per_camera)
 
 
 if __name__ == "__main__":

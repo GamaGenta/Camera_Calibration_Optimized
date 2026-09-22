@@ -131,7 +131,7 @@ Triangulation bekannter 3D-Punkte (ChArUco-Eckpunkte) und Vergleich mit Referenz
 | CAM2–CAM4 | 4,362 | 58,6° (verkettet) |
 | CAM3–CAM4 | 4,362 | 95,3° (verkettet) |
 
-> Skalenfehler < 0,03 % und mittlere 3D-Residuen von ~0,8 mm bei ~2,5 m Arbeitstiefe entsprechen einer relativen Genauigkeit von ca. **1 : 3125**.
+> Skalenfehler < 0,03 % und mittlere 3D-Residuen von ~0,8 mm bei ~2,5 m Arbeitstiefe entsprechen einer relativen Genauigkeit von ca. **1 : 3125** (0,8 : 2500).
 
 ---
 

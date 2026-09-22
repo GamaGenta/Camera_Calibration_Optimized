@@ -36,6 +36,10 @@ nachholen (am besten Frames mit allen drei Kameras gleichzeitig).
 Aufruf:  python E_bundle_adjust.py
 """
 
+import csv
+import math
+from decimal import Decimal, InvalidOperation
+import pandas as pd
 import os
 import glob
 import pickle
@@ -48,6 +52,8 @@ import calib_common as cc
 
 REFINE_INTRINSICS = False   # konservativ: erst Extrinsics+Posen global loesen
 MIN_CORNERS = 8
+
+history = {'cost': [], 'rms': []}
 
 
 def load(name):
@@ -105,6 +111,14 @@ def pack(ext, shots):
     return np.array(p, dtype=np.float64)
 
 
+def residuals_logged(x, shots, K, D):
+    f = residuals(x, shots, K, D)            # Ihre bestehende Funktion (Residuen)
+    val = 0.5 * np.sum(f**2)               # 0.5*(0.25+0.09+0.01) = 0.175
+    history['cost'].append(val)            # speichert 0.175
+    # history['cost'].append(0.5 * np.sum(f**2))
+    history['rms'].append(np.sqrt(np.mean(f**2)))
+    return f
+
 def residuals(params, shots, K, D):
     rvec12 = params[0:3]; tvec12 = params[3:6]
     rvec13 = params[6:9]; tvec13 = params[9:12]
@@ -159,6 +173,110 @@ def decompose(R, label):
     ang = np.degrees(np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1)))
     return ang
 
+'''
+def save_r_csv(r1, filename='r1.csv', sep=';'):
+    r1 = np.asarray(r1).ravel()
+    if r1.size % 2 == 0:
+        pts = r1.reshape(-1, 2)
+        df = pd.DataFrame(pts, columns=['dx', 'dy'])
+        df['abs_dx'] = df['dx'].abs() #abs = absolute value
+        df['abs_dy'] = df['dy'].abs()
+        df['norm_px'] = np.sqrt((df['dx']**2 + df['dy']**2))
+    else:
+        df = pd.DataFrame(r1, columns=['residual'])
+        df['abs_residual'] = df['residual'].abs()
+    df.index.name = 'obs_index'
+    df.to_csv(filename, sep=sep, index=True, float_format='%.6f')
+    return os.path.abspath(filename)
+'''
+
+def save_r_csv(r1, filename='r1.csv', sep=';'):
+    r1 = np.asarray(r1).ravel()
+    rows = []
+    if r1.size % 2 == 0:
+        pts = r1.reshape(-1, 2)
+        for dx, dy in pts:
+            norm = math.hypot(dx, dy)
+            rows.append([dx, dy, abs(dx), abs(dy), norm])
+        header = ['dx', 'dy', 'abs_dx', 'abs_dy', 'norm_px']
+    else:
+        for v in r1:
+            rows.append([v, abs(v)])
+        header = ['residual', 'abs_residual']
+
+    def fmt_num(v):
+        if v is None or (isinstance(v, float) and math.isnan(v)):
+            return ''
+        try:
+            d = Decimal(str(v))            # Decimal aus String, vermeidet direkte Float-Effekte
+            s = format(d, 'f')             # keine Exponentialschreibweise
+        except (InvalidOperation, ValueError):
+            s = str(v)
+        return s.replace('.', ',')        # nur Punkt -> Komma ersetzen
+
+    with open(filename, 'w', encoding='utf-8', newline='') as fout:
+        writer = csv.writer(fout, delimiter=sep, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(header)
+        for row in rows:
+            writer.writerow([fmt_num(x) for x in row])
+
+    return os.path.abspath(filename)
+
+def check_residual_order(r0, r1, k=100, tol=1e-9, save_csv=None):
+    """
+    Prüft, ob r0 und r1 dieselbe Reihenfolge haben und liefert Diagnostics.
+    - r0, r1: array-like (1D oder flachbar)
+    - k: Top-k für Vergleich der stärksten Residuen
+    - tol: Abweichungstoleranz für Gleichheitscheck (absolute)
+    - save_csv: optionaler Pfad, um alle Paare index;r0;r1;diff zu speichern
+    Returns: dict mit Schlüssel:
+      equal_shape (bool), equal_order (bool), num_mismatches (int),
+      mismatches (list der ersten 20 (index, r0, r1, diff)),
+      topk, topk_match_rate (float)
+    """
+    r0 = np.asarray(r0).ravel()
+    r1 = np.asarray(r1).ravel()
+
+    if r0.shape != r1.shape:
+        return {
+            "equal_shape": False,
+            "msg": f"different lengths: r0={r0.size}, r1={r1.size}"
+        }
+
+    # genauer Wertevergleich in Reihenfolge
+    equal_mask = np.isclose(r0, r1, atol=tol, rtol=0.0)
+    equal_order = bool(equal_mask.all())
+    diff_idx = np.nonzero(~equal_mask)[0]
+
+    # Top-k Übereinstimmung der Indizes der größten Absolutwerte
+    k = min(int(k), r0.size)
+    idx0 = np.argsort(-np.abs(r0))[:k]
+    idx1 = np.argsort(-np.abs(r1))[:k]
+    topk_match_rate = np.intersect1d(idx0, idx1).size / k if k > 0 else 1.0
+
+    # erste N Mismatches sammeln
+    mismatches = []
+    for i in diff_idx[:20]:
+        mismatches.append((int(i), float(r0[i]), float(r1[i]), float(r0[i] - r1[i])))
+
+    # optional CSV schreiben (Semikolon, deutsches Dezimalkomma)
+    if save_csv:
+        with open(save_csv, 'w', encoding='utf-8', newline='') as fout:
+            writer = csv.writer(fout, delimiter=';')
+            writer.writerow(['index', 'r0', 'r1', 'diff'])
+            for i in range(r0.size):
+                def fmt(x, f="{:.6f}"):
+                    return f.format(float(x)).replace('.', ',')
+                writer.writerow([i, fmt(r0[i]), fmt(r1[i]), fmt(r0[i] - r1[i])])
+
+    return {
+        "equal_shape": True,
+        "equal_order": equal_order,
+        "num_mismatches": int(diff_idx.size),
+        "mismatches": mismatches,
+        "topk": k,
+        "topk_match_rate": float(topk_match_rate)
+    }
 
 def main():
     board = cc.make_board()
@@ -191,12 +309,35 @@ def main():
     J = sparsity(shots)
     print("Optimiere (Levenberg-Marquardt, sparse) ...")
     sol = least_squares(
-        residuals, p0, jac_sparsity=J, method="trf",
+        residuals_logged, p0, jac_sparsity=J, method="trf",
         x_scale="jac", loss="huber", f_scale=1.0,
         args=(shots, K, D), verbose=2, max_nfev=80,
         #args=(shots, K, D), verbose=2, max_nfev=20000,
     )
+
     r1 = residuals(sol.x, shots, K, D)
+    #test export residuals 
+    print(f'r1: {r1}') #resiuals
+
+    r1Array = np.asarray(r1).ravel()              # (2N,)
+    print(f'r1Array (2N,): {r1Array}')                          
+    squared = r1**2                     # quadrierte Residuen pro Komponente
+    print(f'quadrierte Residuen pro Komponente/Beobachtung: {squared}')
+    rms = np.sqrt(np.mean(squared))     # RMS
+    print(f'RMS: {rms}')
+    # print(f'history: {history}')
+
+    #export r0 and r1 Array to csv
+    print(save_r_csv(r0, 'r0_pixels_4-cams_global.csv'))
+    print(save_r_csv(r1, 'r1_pixels_4-cams_global.csv'))
+    #exprot history to csv
+    pd.DataFrame(history).to_csv('ls_history.csv', sep=';', index=False, float_format='%.6f')
+
+    # Beispielnutzung nach Berechnung von r0 und r1:
+    result = check_residual_order(r0, r1, k=100, tol=1e-9, save_csv='resid_compare.csv')
+    print(result)
+
+    #root mean square calculation 
     rms1 = np.sqrt(np.mean(r1 ** 2))
     print(f"\nEnd-Reprojektion (global) RMS:   {rms1:.4f} px  "
           f"(Start {rms0:.4f})")

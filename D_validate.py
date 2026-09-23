@@ -36,6 +36,9 @@ import cv2
 
 import calib_common as cc
 
+# am Anfang deiner main/report-Traversierung:
+res3d = {}  # dict sammeln
+
 sc_per_camera = {}
 
 def load(name):
@@ -149,6 +152,13 @@ def report_triangulation(name, res):
     print(f"   3D-Residuum (starr):      mean={res['resid_mm'].mean():.2f} mm "
           f"median={np.median(res['resid_mm']):.2f} mm "
           f"max={res['resid_mm'].max():.2f} mm")
+    
+    
+    # Daten Sammeln
+    res3dCam = res['resid_mm']   # sollte (N,3) sein
+    res3d[name] = res3dCam
+
+
     print(f"   Rekonstruierte Tiefe Z:   {res['depth'].mean():.2f} m "
           f"[{res['depth'].min():.2f}, {res['depth'].max():.2f}]")
     if abs(sc.mean() - 1) > 0.02:
@@ -271,6 +281,52 @@ def multicam_consistency():
 
     
 
+def export_3d_residuals_long_csv(filename, res3d_dict, sep=';', decimal_comma=True, include_norm=True):
+    # res3d_dict: { camera_name: array_like (N,3) or flat (3*N,) or 1D norms (N,) }
+    def fmt(x):
+        if x is None:
+            return ''
+        s = f"{x:.6f}"
+        if decimal_comma:
+            s = s.replace('.', ',')
+        return s
+
+    with open(filename, 'w', encoding='utf-8') as f:
+        # Header
+        headers = ['camera', 'index', 'rx', 'ry', 'rz']
+        if include_norm:
+            headers.append('norm')
+        f.write(sep.join(headers) + '\n')
+
+        for cam in sorted(res3d_dict.keys()):
+            arr = np.asarray(res3d_dict[cam], dtype=float)
+            if arr.ndim == 1:
+                if arr.size % 3 == 0 and arr.size != 0:
+                    arr = arr.reshape((-1, 3))
+                    norms = np.linalg.norm(arr, axis=1)
+                else:
+                    # Treat as 1D norms
+                    norms = arr.copy()
+                    arr = None
+            else:
+                if arr.shape[1] != 3:
+                    raise ValueError(f"Für Kamera {cam} wird ein (N,3)-Array erwartet.")
+                norms = np.linalg.norm(arr, axis=1)
+
+            if arr is None:
+                for i, n in enumerate(norms):
+                    row = [cam, str(i), '', '', '']
+                    if include_norm:
+                        row.append(fmt(n))
+                    f.write(sep.join(row) + '\n')
+            else:
+                for i, (rx, ry, rz) in enumerate(arr):
+                    row = [cam, str(i), fmt(rx), fmt(ry), fmt(rz)]
+                    if include_norm:
+                        row.append(fmt(norms[i]))
+                    f.write(sep.join(row) + '\n')
+
+
 def main():
     board = cc.make_board()
     detector = cc.make_detector(board)
@@ -289,8 +345,13 @@ def main():
 
     multicam_consistency()
 
+    
+    # nach allen Kameras:
+    export_3d_residuals_long_csv('res3d4cams_long.csv', res3d)
+
     # export_sc_abs_csv('sc_abs_per_camera.csv') # save Skalenfehler und faktor
     export_sc_and_errors_csv('sc_with_errors.csv', sc_per_camera)
+
 
 
 if __name__ == "__main__":
